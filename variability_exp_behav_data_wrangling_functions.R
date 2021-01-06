@@ -21,7 +21,7 @@ get_data <- function(sub_num, ses){
 
   ### now assign condition blocks to trials
   trials$block = NA
-  trials_per_block = 10 
+  trials_per_block = 5 
   total_blocks = length(trials$cond[trials$cond==1])/trials_per_block
   trials$block[trials$cond == 1] = rep(c(1:total_blocks), each = length(trials$cond[trials$cond==1])/total_blocks)
   trials$block[trials$cond == 2] = rep(c(1:total_blocks), each = length(trials$cond[trials$cond==2])/total_blocks)
@@ -62,7 +62,7 @@ get.summary.n.for.door <- function(sub_num, sess){
   # that can be combined with the dataframe of subject saccade/door frequencies
   tmp.dat =  read.table(sprintf('sub-0%d/beh/sub-0%d_ses-%d_task-iforage-v1_trls.tsv', sub_num, sub_num, sess), header = TRUE)
   tmp.dat = tmp.dat[tmp.dat$t != 999, ]
-  trials_per_block = 10
+  trials_per_block = 5
   total_blocks = length(tmp.dat$cond[tmp.dat$cond==1])/trials_per_block
   tmp.dat$block[tmp.dat$cond == 1] = rep(c(1:total_blocks), each = length(tmp.dat$cond[tmp.dat$cond==1])/total_blocks)
   tmp.dat$block[tmp.dat$cond == 2] = rep(c(1:total_blocks), each = length(tmp.dat$cond[tmp.dat$cond==2])/total_blocks)
@@ -170,7 +170,7 @@ compute_mat_dist <- function(x, y){
 get_trans_sim_by_cond <- function(data, ndoors){
   # for one subject, session and condition, get the similarity between matrices across trials, and return as
   # a data frame
-  trials = unique(data$t)
+  trials = unique(data$block)
   out = data.frame(dist=rep(NA, length(trials-1)))
   for (i in 2:length(trials)){
     # a = rbind(tail(data[data$t == trials[i-1],],1), data[data$t == trials[i], ])
@@ -179,8 +179,8 @@ get_trans_sim_by_cond <- function(data, ndoors){
     # } else {
     #   b = rbind(tail(data[data$t == trials[i-2],],1), data[data$t == trials[i-1],])
     # }
-    a = data[data$t == trials[i], ]
-    b = data[data$t == trials[i-1], ]
+    a = data[data$block == trials[i], ]
+    b = data[data$block == trials[i-1], ]
     if (length(a$t) > 1 & length(b$t) > 1){
       a = make_transition_matrix(a, ndoors)
       b = make_transition_matrix(b, ndoors)
@@ -191,8 +191,25 @@ get_trans_sim_by_cond <- function(data, ndoors){
   out = out %>% drop_na()
   out$sub = data$sub[1]
   out$sess = data$sess[1]
-  out$t = 1:length(out$dist)
+  out$block = 1:length(out$dist)
   out$cond = data$cond[1]
   out
 }
 
+get.proportion.state <- function(data, sub_num, sess_num, cut_off_upper, cut_off_lower){
+  # compute proportion of time that a participant is in idiopathic or non-idiopathic states
+  
+  sub.dat <- data %>% filter(sub == sub_num & sess == sess_num) %>%
+    summarise(min=min(dist),
+              max=max(dist))
+  sub.dat$idio = seq(sub.dat$min, sub.dat$max, by=(sub.dat$max-sub.dat$min)/100)[cut_off_lower] 
+  sub.dat$nidio = seq(sub.dat$min, sub.dat$max, by=(sub.dat$max-sub.dat$min)/100)[cut_off_upper] 
+  
+  prcnt.dat <- data %>% filter(sub == sub_num & sess == sess_num) %>%
+    summarise(sub = sub[1],
+              sess = sess[1],
+              idiop=length(dist[dist<=sub.dat$idio])/(length(dist)),
+              nidio=length(dist[dist>=sub.dat$nidio])/length(dist))
+  
+  prcnt.dat
+}

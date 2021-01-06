@@ -61,7 +61,44 @@ sess = rep(c(1:2), each=se, times=length(s))
 cond = rep(c("A", "B"), times=se*length(s))
 dist.dat <- do.call(rbind, mapply(function(x,y,z) get_trans_sim_by_cond(data=out.dat[out.dat$sub == x & out.dat$sess == y & out.dat$cond == z, ], ndoors=16), subs, sess, cond, SIMPLIFY=FALSE))
 plot.distances(dist.dat)
-  
+ 
+# group_by(sess, block, cond) %>%
+#              summarise(dist=mean(dist)) %>%
+levels(dist.dat$sess) = c("A", "B")
+dist.dat %>% filter(cond == "A") %>%
+             filter(sub == "1"| sub=="2") %>%
+             ggplot(aes(x=block,y=dist, colour=sess, group=sess)) +
+             geom_line(lwd=2) +
+             facet_wrap(~sub, nrow=2) +
+             scale_colour_manual(values=wes_palette("IsleofDogs1")[c(5:6)]) +
+             theme_cowplot() +
+ #            theme(legend.position="none") +
+             theme(axis.title.x = element_text(face = "italic"),
+             axis.title.y = element_text(face = "italic"))
+ggsave("dstbyblk.png", width = 3, height = 5, units="in")  
+
+prcnt.dat <- do.call(rbind, mapply(get.proportion.state, sub=rep(s, each=2), sess=rep(c("A","B"), times=length(s)), 
+                                   MoreArgs=list(data=dist.dat, cut_off_lower=50, cut_off_upper=50), SIMPLIFY=FALSE))
+
+#### PLOTTING SUBS FOR THE GRANT APP
+prcnt.dat$sess = factor(prcnt.dat$sess)
+levels(prcnt.dat$sess) = c("A", "B")
+prcnt.dat %>% pivot_longer(cols=idiop:nidio, names_to="state", values_to="prcnt") %>%
+              ggplot(aes(state, prcnt, fill=state)) +
+              geom_boxplot() +
+              geom_line(aes(group=sub), position = position_dodge(0.2), alpha=0.5) +
+              geom_point(aes(fill=sess,group=sub), position = position_dodge(0.2), alpha=0.5) +
+              facet_wrap(~sess) +
+              scale_fill_manual(values=wes_palette("IsleofDogs1")[c(2:1, 2:1)]) +
+              scale_colour_manual(values=wes_palette("IsleofDogs1")[c(2:1, 2:1)]) +
+              theme_cowplot() +
+              theme(legend.position="none") +
+              scale_x_discrete(labels=c("s", "ns")) +
+              theme(axis.title.x = element_text(face = "italic"),
+                    axis.title.y = element_text(face = "italic"))
+
+ggsave("prcnt.png", width = 3, height = 3, units="in")       
+
 #######################################################################################################################################    
 ######################################################  COMPUTE KL VARIABLES ######################################################  
 # KL things
@@ -73,7 +110,7 @@ subjs = s
 tsubs = length(subjs)
 session = c(1, 2)
 tconds = 2
-tblocks = 8
+tblocks = 16
 conds = rep(c("A", "B"), each=tblocks, times = length(subs)*length(session))
 blocks = rep(seq(1,tblocks,1), times = tconds*length(subs)*length(session))
 ndoors = 16
@@ -99,10 +136,10 @@ doors = rep(c(1:ndoors), times = tconds*tsubs*length(session)) # doors * conditi
 conds.to.calc = rep(c("A", "B"), each = ndoors, times=tsubs*length(session))
 subs = rep(subjs, each=ndoors*tconds*length(session))
 sess = rep(session, each=ndoors*tconds, times=length(session))
-tblocks = 8
+tblocks = 16
 
 ### ESTABLISH WORLD AND SUBJECT DIRICHLET PARAMS, GIVEN EXPERIENCE
-priors.over.world.and.sub = mapply(get.priors, cond=conds.to.calc, door=doors, sub=subs, sess=sess, MoreArgs = list(data=sum.dat.for.kl, tblocks=8), SIMPLIFY = FALSE)
+priors.over.world.and.sub = mapply(get.priors, cond=conds.to.calc, door=doors, sub=subs, sess=sess, MoreArgs = list(data=sum.dat.for.kl, tblocks=tblocks), SIMPLIFY = FALSE)
 priors.over.world.and.sub = do.call(rbind, priors.over.world.and.sub)
 priors.over.world.and.sub$block = as.factor(priors.over.world.and.sub$block)
 priors.over.world.and.sub$door = as.factor(priors.over.world.and.sub$door)
@@ -113,23 +150,32 @@ sum.dat.for.kl$door = as.factor(sum.dat.for.kl$door)
 
 
 # NOW COMPUTE KL DIVERGENCE BETWEEN BLOCKS FOR EACH PARTICIPANT AND SESSION
-tblocks = 8
+tblocks = 16
 subs = rep(subjs, each = tconds*length(session)*tblocks)
 conds = rep(c("A", "B"), times = tsubs*length(session), each=tblocks)
 sess = rep(c("1", "2"), each=tblocks*tconds, times=length(s))
-blocks = rep(c(1:8), times = length(subs))
+blocks = rep(c(1:tblocks), times = length(subs))
 kl.over.blocks = mapply(get.kl.div.blocks, cond = conds, block = blocks, sub = subs, sess = sess, MoreArgs=list(sum.dat.for.kl), SIMPLIFY=FALSE)
 kl.over.blocks = do.call(rbind, kl.over.blocks)
 
-
-tmp.dat = rbind(kl.over.blocks[kl.over.blocks$sess == 1 & kl.over.blocks$block == 1,],
-                kl.over.blocks[kl.over.blocks$sess == 2 & kl.over.blocks$block == 8,])
-tmp.dat %>% ggplot(aes(sess, D, fill=sess)) +
-  geom_boxplot() +
-  geom_line(aes(group=sub), position = position_dodge(0.2), alpha=0.5) +
-  geom_point(aes(fill=sess,group=sub), position = position_dodge(0.2), alpha=0.5) +
-  facet_wrap(~cond)
-
+kl.over.blocks$block = as.factor(kl.over.blocks$block)
+levels(kl.over.blocks$sess) = c("A", "B")
+kl.over.blocks %>% filter(block==1 | block==16) %>%
+                   filter(cond == "A") %>%
+                   ggplot(aes(block, D, fill=block)) +
+                   geom_boxplot() +
+                   geom_line(aes(group=sub), position = position_dodge(0.2), alpha=0.5) +
+                   geom_point(aes(fill=sess,group=sub), position = position_dodge(0.2), alpha=0.5) +
+                   facet_wrap(~sess) +
+                   scale_fill_manual(values=wes_palette("IsleofDogs1")[c(5:8)]) +
+                   scale_colour_manual(values=wes_palette("IsleofDogs1")[c(5:8)]) +
+                   theme_cowplot() +
+                   theme(legend.position="none") +
+                   scale_x_discrete(labels=c("start", "end")) +
+                   theme(axis.title.x = element_text(face = "italic"),
+                   axis.title.y = element_text(face = "italic")) +
+                   ylab("D(P||Q)")
+ggsave("Div.png", width = 5, height = 5, units="in") 
 
 # this function computes p(x; a) 
 get.p.given.a.param <- function(a, x){
